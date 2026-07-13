@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Video Agent 品質評測 — 課題設計</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--panel2:#1c2230;--border:#2a3140;--ink:#e6edf3;--muted:#8b97a7;--dim:#5c6673;--accent:#6ea8fe;--good:#3fb950;--warn:#f0b429;--purple:#b98cff;}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang TC","PingFang SC","Microsoft JhengHei","Microsoft YaHei",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;font-size:15px;line-height:1.75}
+  .wrap{max-width:860px;margin:0 auto;padding:26px 22px 90px}
+  .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+  h1{font-size:24px;margin:0 0 4px;letter-spacing:-.3px} .sub{color:var(--muted);font-size:14px}
+  .meta{color:var(--dim);font-size:12.5px;margin-top:6px}
+  .lang{flex:none;display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;background:var(--panel)}
+  .lang button{background:transparent;border:none;color:var(--muted);padding:7px 13px;cursor:pointer;font-size:13px;font-weight:700}
+  .lang button.on{background:var(--accent);color:#0d1117}
+  section{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-top:16px}
+  h2{font-size:18px;margin:0 0 12px;letter-spacing:-.2px}
+  ul{margin:8px 0;padding-left:20px} li{margin-bottom:7px;font-size:14.5px;color:#d6dee7}
+  b,strong{color:#fff}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:4px}
+  th,td{padding:9px 11px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:600}
+  td:first-child{font-weight:600;color:#fff;white-space:nowrap} .why td:nth-child(1){color:var(--accent)}
+  .scenario{background:var(--panel2);border-left:3px solid var(--purple);border-radius:0 8px 8px 0;padding:12px 15px;font-size:14.5px;margin-bottom:6px}
+  .subh{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin:18px 0 6px}
+  .deliv{background:rgba(63,185,80,.08);border:1px solid #2b5236;border-radius:10px;padding:12px 15px;font-size:14.5px;margin-top:8px}
+  .turn{background:var(--panel2);border:1px solid var(--border);border-radius:11px;padding:14px 16px;margin-bottom:11px}
+  .turn .th{font-weight:800;font-size:14px;color:var(--purple);margin-bottom:6px}
+  .turn .prompt{background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:10px 13px;font-size:14px;color:#e6edf3;font-style:italic}
+  .turn .test{font-size:12.5px;color:var(--muted);margin-top:7px}
+  .rub td:first-child{color:var(--warn)}
+  .proc{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px 15px;margin-top:12px}
+  .proc ul{margin:4px 0}
+  .note{background:linear-gradient(90deg,rgba(110,168,254,.10),rgba(110,168,254,.02));border:1px solid #2c4a7a;border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:14px 16px;margin-top:16px;font-size:13.5px;line-height:1.7}
+  .foot{color:var(--dim);font-size:11.5px;margin-top:26px;text-align:center;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div><h1 id="t-h1"></h1><div class="sub" id="t-sub"></div><div class="meta" id="t-meta"></div></div>
+    <div class="lang"><button data-lang="zh">中文</button><button data-lang="en">EN</button></div>
+  </div>
+  <div id="content"></div>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+const D={"title_zh": "AI Video Agent 品質評測 — 課題設計文檔", "title_en": "AI Video Agent Quality Benchmark — Test Design", "sub_zh": "固定任務 · 商業創作者 · 以社群短影音廣告為標準課題", "sub_en": "Fixed task · commercial creators · social-media video ad as the standard challenge", "meta_zh": "設計依據:Luma Growth Insights 週報、Onboarding Insights、Realm/Seed 使用數據", "meta_en": "Grounded in: Luma Growth Insights decks, Onboarding Insights, Realm/Seed usage data", "s_obj_zh": "1 · 測試目標", "s_obj_en": "1 · Objective", "obj_zh": ["用<b>一個固定、可重複的商業課題</b>,評測 AI video agent 的<b>產出品質、編輯反應力、與協作能力</b>。", "所有受測者/所有 agent 版本做<b>完全相同</b>的任務、用<b>相同素材</b>、跑<b>相同的三輪互動腳本</b>,好讓結果可以跨人、跨版本、跨時間直接比較。", "次要收穫:過程中順便記錄「用戶想做卻做不到的事」,作為需求線索。"], "obj_en": ["Use <b>one fixed, reproducible commercial challenge</b> to benchmark an AI video agent's <b>output quality, edit responsiveness, and collaboration</b>.", "Every tester / every agent version runs the <b>exact same</b> task, on the <b>same assets</b>, through the <b>same 3-turn script</b> — so results compare across people, versions, and time.", "Secondary payoff: capture what users wanted but couldn't get, as demand signal."], "s_why_zh": "2 · 為什麼是這個課題(每個決策都有 research 依據)", "s_why_en": "2 · Why this challenge (every choice is grounded)", "why_rows": [["固定任務 = 社群短影音廣告", "Fixed task = a social-media video ad", "「Social Media Video Ads」是所有層級的 #1 seed;也是商業用途中最常見、最可變現的內容。", "'Social Media Video Ads' is the #1 seed across every tier — the most common, most monetizable commercial content."], ["對象 = 商業創作者", "Audience = commercial creators", "品牌 4.55%、行銷 3.81% 的轉換率約是「純好玩」1.21% 的 2–4 倍,是 Luma 想要的變現客群。", "Branding 4.55% & Marketing 3.81% convert ~2–4× 'Just for fun' 1.21% — Luma's monetizable ICP."], ["提供標準素材包(帶素材做)", "Provide a standard asset pack (asset-driven)", "「帶自己的素材來做轉換」與轉換高度相關(+11 個百分點);也讓每次測試可重複。", "'Bring your own asset to transform' correlates with conversion (+11 pts) — and makes the test reproducible."], ["強制三輪互動", "Force a 3-turn interaction", "發 2 則以上訊息的用戶轉換機率高 3.4 倍;價值來自迭代,不是一次生成。", "2+ messages → 3.4× conversion odds; value comes from iteration, not one-shot."], ["評分含「agent 是否主導/提示成本」", "Score whether the agent leads / previews cost", "Onboarding 洞察:agent 應主動帶領、提供低摩擦下一步;額度焦慮會壓抑實驗。", "Onboarding insight: the agent should lead and offer a low-friction next step; credit anxiety suppresses experimentation."], ["輸出 9:16 直式", "Deliver 9:16 vertical", "社群投放的標準格式。", "Standard placement format for social."]], "s_task_zh": "3 · 課題定義(固定任務)", "s_task_en": "3 · The challenge (fixed task)", "scenario_zh": "情境:你是一個新消費品牌的社群負責人。手上有產品照與一頁品牌 brief,需要在今天內做出一支可直接投放的社群短影音廣告。", "scenario_en": "Scenario: you're the social lead for a new consumer brand. You have product photos and a one-page brief, and need a runnable social video ad by end of day.", "asset_head_zh": "標準素材包(測試前由主持人備妥、每次沿用同一套)", "asset_head_en": "Standard asset pack (prepared once by the moderator, reused every run)", "asset_zh": ["虛構品牌:<b>AURA</b> —— 氣泡機能飲(adaptogenic sparkling drink)。標語:<b>「Find your calm.」</b>", "產品照 ×3:(1) 單罐正面、白底棚拍;(2) 單罐帶水珠、深色背景;(3) 三口味一字排開、彩色背景。", "品牌規範:主色 深紫 + 暖金點綴;字標 wordmark「AURA」;目標客群 25–40 歲、注重身心平衡的都會消費者。", "情境參考圖 ×1:戶外手持一罐(給 agent 生活感參考)。"], "asset_en": ["Fictional brand: <b>AURA</b> — an adaptogenic sparkling drink. Tagline: <b>'Find your calm.'</b>", "3 product photos: (1) single can, front label, white studio; (2) single can with condensation on dark bg; (3) 3-flavor lineup on a colored bg.", "Brand guide: deep-plum primary + warm-gold accent; 'AURA' wordmark; target 25–40 urban wellness-minded consumers.", "1 lifestyle reference: a hand holding the can outdoors (for the agent's context)."], "deliv_zh": "交付物:一支 <b>15 秒、9:16 直式 MP4</b>,前 2 秒要有吸睛 hook,清楚呈現產品,結尾出現標語與字標。", "deliv_en": "Deliverable: a <b>15-second, 9:16 vertical MP4</b> — hook in the first 2s, product shown clearly, ending on tagline + wordmark.", "turns_head_zh": "固定三輪互動腳本(每位受測者逐字照唸給 agent)", "turns_head_en": "Fixed 3-turn script (read verbatim to the agent by every tester)", "turns": [{"t_zh": "第 1 輪 · 生成", "t_en": "Turn 1 · Create", "p_zh": "「用附上的產品照與品牌 brief,做一支 15 秒直式(9:16)的 AURA 社群廣告。開頭要有吸睛 hook、產品要清楚露出、結尾放標語與字標。」", "p_en": "“Using the attached product photos and brand brief, create a 15-second vertical (9:16) social ad for AURA. Open with an eye-catching hook, show the product clearly, and end on the tagline and wordmark.”", "test_zh": "測:能不能用真實素材、遵循 brief、產出結構完整的第一版。", "test_en": "Tests: can it use the real assets, follow the brief, and produce a coherent first cut."}, {"t_zh": "第 2 輪 · 定點修改", "t_en": "Turn 2 · Targeted edit", "p_zh": "「把結尾改掉——不要三罐排排站,改成單罐帶水珠的特寫,標語停留 2 秒。其他都不要動。」", "p_en": "“Change the ending — instead of the 3-can lineup, end on a close-up of a single can with condensation, and hold the tagline for 2 seconds. Keep everything else the same.”", "test_zh": "測(關鍵):能不能只改指定部分、<b>保留其他不變</b>,而不是整支重生成。這是最能拉開差距的一輪。", "test_en": "Tests (key): can it change only the specified part and <b>preserve the rest</b> — not regenerate everything. The most discriminating turn."}, {"t_zh": "第 3 輪 · 換版/再利用", "t_en": "Turn 3 · Repurpose", "p_zh": "「現在給我這支廣告的 6 秒精簡版,並改成 1:1 方形給動態消息用。」", "p_en": "“Now give me a 6-second cutdown of this ad, resized to 1:1 square for feed placement.”", "test_zh": "測:改時長 + 改比例後,內容還連貫、可用嗎。", "test_en": "Tests: after changing duration + aspect, is it still coherent and usable."}, {"t_zh": "第 4 輪(選配)· 風格變體", "t_en": "Turn 4 (optional) · Style variant", "p_zh": "「再做一個更高級、更精品感的版本。」", "p_en": "“Make a second variant that feels more premium / luxury.”", "test_zh": "測:對抽象風格指令的理解與執行。", "test_en": "Tests: interpreting an abstract style instruction."}], "s_rubric_zh": "4 · 評分標準(每項 1–5 分,附錨點)", "s_rubric_en": "4 · Evaluation rubric (score each 1–5, with anchors)", "rubric": [["A. 素材與品牌遵循", "A. Brief & brand adherence", "有沒有用到真實產品照、正確的顏色/字標/標語", "Used the real product photos, correct colors/wordmark/tagline"], ["B. 視覺保真度", "B. Visual fidelity", "產品長得像本尊嗎;有沒有變形、亂字、鬼影", "Does the product look right; any warping, garbled text, artifacts"], ["C. 影片動態品質", "C. Motion quality", "運鏡順不順、有沒有 morphing/閃爍、鏡頭連貫", "Smooth motion, no morphing/flicker, coherent shots"], ["D. 剪輯與節奏", "D. Editing & pacing", "前 2 秒有 hook、結構清楚、符合秒數", "Hook in first 2s, clear structure, hits duration"], ["E. 編輯反應力(第2輪)", "E. Edit responsiveness (Turn 2)", "有沒有只改指定處、保留其餘", "Applied only the change, preserved the rest"], ["F. 換版能力(第3輪)", "F. Repurpose (Turn 3)", "比例/時長正確、內容仍可用", "Correct aspect/duration, still usable"], ["G. 商業可用性", "G. Commercial usability", "整體而言「你敢不敢直接拿去投放」", "Holistic — would you actually run this"], ["H. Agent 協作品質", "H. Collaboration quality", "有沒有主動帶領、澄清、提示下一步/成本", "Did it lead, clarify, suggest next steps / preview cost"]], "proc_metrics_zh": ["過程指標(另記,非 1–5):", "<b>到可用結果的輪數</b>(幾輪才做出「敢投放」的版本)", "<b>額度消耗</b>(整個任務燒了多少 credits)", "<b>失敗點</b>(在哪一步壞掉、怎麼壞)"], "proc_metrics_en": ["Process metrics (logged separately, not 1–5):", "<b>Turns-to-acceptable</b> (how many turns to a 'runnable' cut)", "<b>Credit spend</b> (total credits for the whole task)", "<b>Failure points</b> (which step broke, and how)"], "s_capture_zh": "5 · 需要記錄/觀察的東西", "s_capture_en": "5 · What to capture", "capture_zh": ["全程螢幕錄影 + 每一則 prompt 與 agent 回覆", "三輪的實際產出影片(存檔)", "受測者 think-aloud(邊做邊講)——特別是卡住的地方", "<b>「我本來想做…但它做不到」</b>清單(需求線索,次要目標)", "任務後 1–5 滿意度 + 一句話「你會不會用它做下一支廣告」"], "capture_en": ["Full screen recording + every prompt and agent reply", "The actual output videos from all 3 turns (archived)", "Tester think-aloud — especially where they get stuck", "A <b>'I wanted to… but it couldn't'</b> list (demand signal, secondary goal)", "Post-task 1–5 CSAT + one line: 'would you use it for your next ad?'"], "s_proto_zh": "6 · 測試流程", "s_proto_en": "6 · Test protocol", "proto_zh": ["<b>受測者</b>:8–12 位商業創作者(廣告/行銷/品牌背景),涵蓋新手與熟手。", "<b>時長</b>:每人 30–40 分鐘,一對一有主持人。", "<b>一致性</b>:同一素材包、同一三輪腳本、主持人逐字唸,不額外提示。", "<b>評分</b>:2 位評審獨立打 A–H,取平均;分歧項討論。", "<b>對照</b>:若要比 agent 版本或比競品,讓同一位受測者跑不同版本(順序輪換以抵消學習效應)。"], "proto_en": ["<b>Testers</b>: 8–12 commercial creators (ad/marketing/branding), mixing novices and pros.", "<b>Length</b>: 30–40 min each, moderated 1:1.", "<b>Consistency</b>: same asset pack, same 3-turn script read verbatim, no extra hints.", "<b>Scoring</b>: 2 raters score A–H independently, averaged; discuss disagreements.", "<b>Comparison</b>: to compare agent versions or competitors, have the same tester run each (counterbalance order to cancel learning effects)."], "s_out_zh": "7 · 產出與成功指標", "s_out_en": "7 · Outputs & success metrics", "out_zh": ["每個維度 A–H 的平均分 + 雷達圖", "<b>可投放率</b>:% 的受測者在 ≤3 輪內做出「敢投放」的版本", "平均<b>到可用結果輪數</b>與<b>額度消耗</b>", "<b>前 3 大失敗模式</b>(排序)", "<b>前 5 大未被滿足的需求</b>(來自「我想做但做不到」清單)"], "out_en": ["Mean score per dimension A–H + a radar chart", "<b>Runnable rate</b>: % of testers reaching a 'runnable' cut in ≤3 turns", "Average <b>turns-to-acceptable</b> and <b>credit spend</b>", "<b>Top 3 failure modes</b> (ranked)", "<b>Top 5 unmet needs</b> (from the 'wanted but couldn't' list)"], "note_zh": "為什麼「固定任務」是對的選擇:它犧牲了需求的多樣性,換來<b>可比較性</b>——你能乾淨地比較 agent 版本、競品、或時間前後。想探索「大家還想做什麼」,建議之後另做一個「開放式探索」測試作為互補(我可以幫你設計那一版)。", "note_en": "Why 'fixed task' is right here: it trades demand diversity for <b>comparability</b> — you can cleanly compare agent versions, competitors, or before/after. To explore 'what else people want,' run a complementary 'open exploration' test later (I can design that one too)."};
+let LANG=localStorage.getItem('gi_langAT')||'zh';
+const L=(zh,en)=>LANG==='zh'?zh:en;
+const UI={foot:{zh:'AI Video Agent 品質評測課題設計 · 依據 Luma research 產出 · 可依實際產品替換素材包',en:'AI Video Agent benchmark design · grounded in Luma research · swap the asset pack for your real product'}};
+function ul(arr){return '<ul>'+arr.map(x=>`<li>${x}</li>`).join('')+'</ul>';}
+function render(){
+  document.documentElement.lang=LANG==='zh'?'zh-TW':'en';
+  document.getElementById('t-h1').textContent=L(D.title_zh,D.title_en);
+  document.getElementById('t-sub').textContent=L(D.sub_zh,D.sub_en);
+  document.getElementById('t-meta').textContent=L(D.meta_zh,D.meta_en);
+  let h='';
+  // 1 objective
+  h+=`<section><h2>${L(D.s_obj_zh,D.s_obj_en)}</h2>${ul(L(D.obj_zh,D.obj_en))}</section>`;
+  // 2 why
+  h+=`<section><h2>${L(D.s_why_zh,D.s_why_en)}</h2><table class="why"><thead><tr><th>${L('設計決策','Design choice')}</th><th>${L('Research 依據','Grounded in')}</th></tr></thead><tbody>`;
+  D.why_rows.forEach(r=>{h+=`<tr><td>${L(r[0],r[1])}</td><td>${L(r[2],r[3])}</td></tr>`;});
+  h+=`</tbody></table></section>`;
+  // 3 task
+  h+=`<section><h2>${L(D.s_task_zh,D.s_task_en)}</h2>`;
+  h+=`<div class="scenario">${L(D.scenario_zh,D.scenario_en)}</div>`;
+  h+=`<div class="subh">${L(D.asset_head_zh,D.asset_head_en)}</div>${ul(L(D.asset_zh,D.asset_en))}`;
+  h+=`<div class="deliv">🎬 ${L(D.deliv_zh,D.deliv_en)}</div>`;
+  h+=`<div class="subh">${L(D.turns_head_zh,D.turns_head_en)}</div>`;
+  D.turns.forEach(t=>{h+=`<div class="turn"><div class="th">${L(t.t_zh,t.t_en)}</div><div class="prompt">${L(t.p_zh,t.p_en)}</div><div class="test">🔍 ${L(t.test_zh,t.test_en)}</div></div>`;});
+  h+=`</section>`;
+  // 4 rubric
+  h+=`<section><h2>${L(D.s_rubric_zh,D.s_rubric_en)}</h2><table class="rub"><thead><tr><th>${L('維度','Dimension')}</th><th>${L('看什麼','What to score')}</th></tr></thead><tbody>`;
+  D.rubric.forEach(r=>{h+=`<tr><td>${L(r[0],r[1])}</td><td>${L(r[2],r[3])}</td></tr>`;});
+  h+=`</tbody></table><div class="proc">${ul(L(D.proc_metrics_zh,D.proc_metrics_en))}</div></section>`;
+  // 5 capture
+  h+=`<section><h2>${L(D.s_capture_zh,D.s_capture_en)}</h2>${ul(L(D.capture_zh,D.capture_en))}</section>`;
+  // 6 protocol
+  h+=`<section><h2>${L(D.s_proto_zh,D.s_proto_en)}</h2>${ul(L(D.proto_zh,D.proto_en))}</section>`;
+  // 7 outputs
+  h+=`<section><h2>${L(D.s_out_zh,D.s_out_en)}</h2>${ul(L(D.out_zh,D.out_en))}</section>`;
+  // note
+  h+=`<div class="note">💡 ${L(D.note_zh,D.note_en)}</div>`;
+  document.getElementById('content').innerHTML=h;
+  document.getElementById('foot').textContent=UI.foot[LANG];
+  document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on',b.dataset.lang===LANG));
+}
+function setLang(l){LANG=l;localStorage.setItem('gi_langAT',l);render();}
+document.querySelectorAll('.lang button').forEach(b=>b.addEventListener('click',()=>setLang(b.dataset.lang)));
+render();
+</script>
+</body>
+</html>

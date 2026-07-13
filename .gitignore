@@ -1,0 +1,8 @@
+# rebuildable — setup.sh restores all of these
+node_modules/
+OpenMontage/
+# runtime state (recreated by the server; contains local project registry)
+studio-projects.json
+# junk
+.DS_Store
+*.log
