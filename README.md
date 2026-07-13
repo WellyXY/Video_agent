@@ -42,6 +42,8 @@ npm start       # 啟動(4747 為後端;Backlot 會自動拉起於 4750)
 
 然後瀏覽器開 **http://localhost:4750**,右下角「＋ 新專案」開始。
 
+> **注意:** 這個 repo 只含源碼(~200KB)。`OpenMontage/`、`node_modules/`、venv 都**不在 repo 裡**,由 `setup.sh` 自動下載重建 —— **首次 setup 約需下載 700MB 依賴**(Remotion 內含 Chromium、Agent SDK 內嵌 Claude Code、Python ONNX/語音模型),視網速需幾分鐘。
+
 `setup.sh` 是**冪等**的(重跑安全),並且會自動處理兩個換機常見坑:
 - **venv 綁絕對路徑** —— repo 從別台機器複製過來時,偵測壞掉的 venv 並自動重建
 - **agent session 綁原機器** —— 自動重置 `studio-projects.json` 的 sessionId(專案與素材保留)
