@@ -405,6 +405,9 @@ app.get('/api/projects/:id/stream', (req, res) => {
   const s = st(req.params.id);
   const from = parseInt(req.query.from || '0', 10);
   for (const ev of s.events.slice(from)) res.write(`data: ${JSON.stringify(ev)}\n\n`);
+  // sync the client's busy indicator to reality on (re)connect — otherwise a UI that was
+  // showing RUNNING when the server restarted would stay stuck on RUNNING forever.
+  res.write(`data: ${JSON.stringify({ type: 'status', text: s.busy ? 'running' : 'idle' })}\n\n`);
   s.clients.add(res);
   const ping = setInterval(() => { try { res.write(':ping\n\n'); } catch {} }, 15000);
   req.on('close', () => { clearInterval(ping); s.clients.delete(res); });
