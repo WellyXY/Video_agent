@@ -6,3 +6,4 @@ studio-projects.json
 # junk
 .DS_Store
 *.log
+sessions/

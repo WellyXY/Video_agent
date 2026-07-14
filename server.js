@@ -97,15 +97,25 @@ function markInitialProgress(proj) {
 }
 
 // ---------- per-project agent session state ----------
+// Chat events are persisted to disk (sessions/<id>.events.jsonl) so the transcript
+// survives a server restart or a browser refresh — not just kept in memory.
+const SESSIONS_DIR = path.join(ROOT, 'sessions');
 const sessions = new Map(); // id -> {events:[], clients:Set(res), busy:bool, abort:AbortController|null}
+function eventsFile(id) { return path.join(SESSIONS_DIR, `${id}.events.jsonl`); }
+function loadEvents(id) {
+  try {
+    return fs.readFileSync(eventsFile(id), 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  } catch { return []; }
+}
 function st(id) {
-  if (!sessions.has(id)) sessions.set(id, { events: [], clients: new Set(), busy: false, abort: null });
+  if (!sessions.has(id)) sessions.set(id, { events: loadEvents(id), clients: new Set(), busy: false, abort: null });
   return sessions.get(id);
 }
 function emit(id, ev) {
   const s = st(id);
   ev.i = s.events.length; ev.ts = Date.now();
   s.events.push(ev);
+  try { fs.mkdirSync(SESSIONS_DIR, { recursive: true }); fs.appendFileSync(eventsFile(id), JSON.stringify(ev) + '\n'); } catch {}
   const line = `data: ${JSON.stringify(ev)}\n\n`;
   for (const res of s.clients) { try { res.write(line); } catch {} }
 }
@@ -368,6 +378,7 @@ app.delete('/api/projects/:id', (req, res) => {
   const reg = loadRegistry();
   reg.projects = reg.projects.filter(p => p.id !== req.params.id);
   saveRegistry(reg); sessions.delete(req.params.id);
+  try { fs.unlinkSync(eventsFile(req.params.id)); } catch {}
   res.json({ ok: true });
 });
 
