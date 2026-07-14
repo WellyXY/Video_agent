@@ -367,8 +367,22 @@ app.get('/api/backlot', async (req, res) => {
   res.json(await ensureBacklot());
 });
 
+// pre-create the OpenMontage project skeleton (canonical init_project, idempotent)
+// so Backlot renders a proper empty board instead of "PROJECT NOT FOUND"
+function ensureOmProject(proj) {
+  return new Promise(resolve => {
+    try {
+      if (fs.existsSync(path.join(OM_PROJECTS, proj.slug))) return resolve(true);
+      const py = path.join(OM_REPO, '.venv', 'bin', 'python');
+      const bin = fs.existsSync(py) ? py : 'python3';
+      const code = `from lib.checkpoint import init_project; init_project(${JSON.stringify(proj.slug)}, title=${JSON.stringify(proj.name)}, pipeline_type="cinematic")`;
+      require('child_process').execFile(bin, ['-c', code], { cwd: OM_REPO, timeout: 15000 }, err => resolve(!err));
+    } catch { resolve(false); }
+  });
+}
+
 // find-or-create a studio project bound to an OpenMontage folder (used by the Backlot chat widget)
-app.get('/api/bind', (req, res) => {
+app.get('/api/bind', async (req, res) => {
   const om = (req.query.slug || '').toString().trim();
   if (!om) return res.status(400).json({ error: 'slug required' });
   const norm = x => x.toLowerCase().replace(/[^a-z0-9]+/g, '');
@@ -380,6 +394,7 @@ app.get('/api/bind', (req, res) => {
     proj = { id: crypto.randomUUID().slice(0, 8), name: om, brief: '', slug: slugify(om), createdAt: Date.now(), sessionId: null };
     reg.projects.push(proj); saveRegistry(reg);
   }
+  await ensureOmProject(proj);
   const s = sessions.get(proj.id);
   res.json({ project: proj, busy: !!(s && s.busy), events: s ? s.events.length : 0, provider: AGENT_PROVIDER, model: AGENT_PROVIDER === 'codex' ? (CODEX_MODEL || 'codex') : 'claude' });
 });

@@ -236,6 +236,11 @@
     .then(r => r.json())
     .then(j => {
       PID = j.project.id;
+      // bind pre-creates the OM project skeleton — if the board 404'd before that, refresh once
+      const appEl = document.getElementById('app');
+      if (appEl && /project not found/i.test(appEl.textContent || '')) {
+        fetch(`/api/project/${encodeURIComponent(OM_SLUG)}/state`).then(r => { if (r.ok) location.reload(); });
+      }
       $('vas-nm').textContent = j.project.name;
       if (j.provider) $('vas-hint').textContent = `agent: ${j.provider}${j.model && j.provider==='openai' ? ' · ' + j.model : ''} · project ${OM_SLUG} · 看板會隨 agent 工作即時更新`;
       setBusy(j.busy);
