@@ -163,7 +163,7 @@
       <button data-t="這個專案目前總花費多少?">💰 成本</button>
     </div>
     <div id="vas-inputrow">
-      <textarea id="vas-input" placeholder="指揮 agent…(Enter 送出)"></textarea>
+      <textarea id="vas-input" placeholder="指揮 agent…(Shift+Enter 送出,Enter 換行)"></textarea>
       <button id="vas-stop">■</button>
       <button id="vas-send">▶</button>
     </div>
@@ -196,10 +196,27 @@
     $('vas-send').disabled = b;
     $('vas-stop').style.display = b ? 'block' : 'none';
   }
+  let streamEl = null, streamText = '';
+  function endStream() { streamEl = null; streamText = ''; }
   function add(ev) {
+    if (ev.type === 'delta') {
+      if (!streamEl) {
+        streamEl = document.createElement('div');
+        streamEl.className = 'vas-m a';
+        msgs.appendChild(streamEl);
+      }
+      streamText += ev.text;
+      streamEl.innerHTML = md(streamText);
+      msgs.scrollTop = msgs.scrollHeight;
+      return;
+    }
     const d = document.createElement('div');
     if (ev.type === 'user') { d.className = 'vas-m u'; d.textContent = ev.text; }
-    else if (ev.type === 'assistant') { d.className = 'vas-m a'; d.innerHTML = md(ev.text); if (!OPEN) $('vas-dot').style.display = 'block'; }
+    else if (ev.type === 'assistant') {
+      // finalize the streaming bubble with the authoritative full text
+      if (streamEl) { streamEl.innerHTML = md(ev.text); endStream(); if (!OPEN) $('vas-dot').style.display = 'block'; msgs.scrollTop = msgs.scrollHeight; return; }
+      d.className = 'vas-m a'; d.innerHTML = md(ev.text); if (!OPEN) $('vas-dot').style.display = 'block';
+    }
     else if (ev.type === 'tool') { d.className = 'vas-m t'; d.textContent = '⚙ ' + ev.text; }
     else if (ev.type === 'result') {
       d.className = 'vas-m r'; const extra = ev.cost != null ? ' · $' + Number(ev.cost).toFixed(3) : (ev.tokens ? ` · ${ev.tokens.in}+${ev.tokens.out} tok` : ''); d.textContent = `— ${ev.text || 'done'} (${ev.turns || '?'} turns${extra}) —`;
@@ -207,14 +224,14 @@
       if (BOARD_MISSING) fetch(`/api/project/${encodeURIComponent(OM_SLUG)}/state`).then(r => { if (r.ok) location.reload(); });
     }
     else if (ev.type === 'error') { d.className = 'vas-m e'; d.textContent = ev.text; }
-    else if (ev.type === 'status') { setBusy(ev.text === 'running'); return; }
+    else if (ev.type === 'status') { if (ev.text !== 'running') endStream(); setBusy(ev.text === 'running'); return; }
     else return;
     msgs.appendChild(d);
     msgs.scrollTop = msgs.scrollHeight;
   }
   function connect() {
     const es = new EventSource(`${STUDIO}/api/projects/${PID}/stream?from=${EVCOUNT}`);
-    es.onmessage = e => { const ev = JSON.parse(e.data); EVCOUNT = Math.max(EVCOUNT, (ev.i ?? 0) + 1); add(ev); };
+    es.onmessage = e => { const ev = JSON.parse(e.data); if (ev.i != null) EVCOUNT = Math.max(EVCOUNT, ev.i + 1); add(ev); };
     es.onerror = () => { es.close(); setTimeout(connect, 2500); };
   }
   async function send(text) {
@@ -228,7 +245,7 @@
   }
   $('vas-send').onclick = () => send();
   $('vas-stop').onclick = () => fetch(`${STUDIO}/api/projects/${PID}/interrupt`, { method: 'POST' });
-  $('vas-input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  $('vas-input').addEventListener('keydown', e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); send(); } });
   $('vas-quick').addEventListener('click', e => { const b = e.target.closest('button'); if (b) send(b.dataset.t); });
 
   // ---------- bind to studio project ----------

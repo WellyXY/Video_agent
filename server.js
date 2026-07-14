@@ -70,6 +70,12 @@ function emit(id, ev) {
   const line = `data: ${JSON.stringify(ev)}\n\n`;
   for (const res of s.clients) { try { res.write(line); } catch {} }
 }
+// transient broadcast (streaming deltas): not stored in the replay buffer, no index
+function emitTransient(id, ev) {
+  const s = st(id);
+  const line = `data: ${JSON.stringify(ev)}\n\n`;
+  for (const res of s.clients) { try { res.write(line); } catch {} }
+}
 
 // ---------- Codex CLI shell provider ----------
 const readline = require('readline');
@@ -188,10 +194,16 @@ async function runAgentClaude(projectId, userText) {
         // repo's CLAUDE.md / AGENT_GUIDE so OpenMontage's agent contract applies).
         systemPrompt: { type: 'preset', preset: 'claude_code' },
         settingSources: ['user', 'project', 'local'],
+        includePartialMessages: true, // token-level streaming to the chat UI
       },
     });
     for await (const msg of q) {
-      if (msg.type === 'system' && msg.subtype === 'init') {
+      if (msg.type === 'stream_event') {
+        const e = msg.event;
+        if (e && e.type === 'content_block_delta' && e.delta && e.delta.type === 'text_delta' && e.delta.text) {
+          emitTransient(projectId, { type: 'delta', text: e.delta.text });
+        }
+      } else if (msg.type === 'system' && msg.subtype === 'init') {
         if (msg.session_id && msg.session_id !== proj.sessionId) {
           proj.sessionId = msg.session_id;
           const r2 = loadRegistry();
