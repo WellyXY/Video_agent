@@ -111,6 +111,12 @@ class EchonImage(BaseTool):
             if out.suffix == "":
                 out = out.with_suffix(ext)
             echon.download(url, str(out))
+            echon.write_meta(str(out), {
+                "type": "image", "provider": "echon", "model": payload["model"], "method": "text_to_image",
+                "prompt": inputs["prompt"], "aspect_ratio": payload["aspect_ratio"],
+                "crop_aspect_ratio": payload.get("crop_aspect_ratio"), "resolution": payload["resolution"],
+                "reference_images": refs or [], "source_url": url,
+            })
         except Exception as e:
             return ToolResult(success=False, error=f"Echon image failed: {e}")
 

@@ -88,6 +88,9 @@ class EchonMusic(BaseTool):
             if out.suffix == "":
                 out = out.with_suffix(ext)
             echon.download(url, str(out))
+            echon.write_meta(str(out), {"type": "music", "provider": "echon", "method": "music_generation",
+                "prompt": inputs["gpt_description_prompt"], "tags": payload.get("tags"),
+                "make_instrumental": payload.get("make_instrumental"), "source_url": url})
         except Exception as e:
             return ToolResult(success=False, error=f"Echon music failed: {e}")
 

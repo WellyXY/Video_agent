@@ -83,6 +83,8 @@ class EchonSfx(BaseTool):
             if out.suffix == "":
                 out = out.with_suffix(ext)
             echon.download(url, str(out))
+            echon.write_meta(str(out), {"type": "sfx", "provider": "echon", "method": "sfx_generation",
+                "prompt": inputs["prompt"], "duration_s": payload.get("duration_s"), "source_url": url})
         except Exception as e:
             return ToolResult(success=False, error=f"Echon sfx failed: {e}")
 

@@ -83,6 +83,20 @@ def download(url: str, out_path: str, timeout: int = 180) -> str:
     return str(out)
 
 
+def write_meta(out_path: str, meta: dict[str, Any]) -> None:
+    """Write a `<file>.meta.json` sidecar recording how an asset was generated
+    (provider, model, method, prompt, references, source url) so the UI can show it."""
+    import json
+
+    try:
+        p = Path(out_path)
+        sidecar = p.with_name(p.name + ".meta.json")
+        clean = {k: v for k, v in meta.items() if v not in (None, "", [], {})}
+        sidecar.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
 # ---- result extractors for each modality ----
 def extract_image_url(task: dict) -> str | None:
     res = task.get("result") or {}

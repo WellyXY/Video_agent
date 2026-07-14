@@ -88,6 +88,9 @@ class EchonVoiceover(BaseTool):
             if out.suffix == "":
                 out = out.with_suffix(ext)
             echon.download(url, str(out))
+            echon.write_meta(str(out), {"type": "voiceover", "provider": "echon", "method": "tts",
+                "text": inputs["text"], "voice_hint": payload.get("voice_hint"),
+                "style_hints": payload.get("style_hints"), "source_url": url})
         except Exception as e:
             return ToolResult(success=False, error=f"Echon voiceover failed: {e}")
 

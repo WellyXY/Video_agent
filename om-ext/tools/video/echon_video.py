@@ -100,6 +100,12 @@ class EchonVideo(BaseTool):
             if out.suffix == "":
                 out = out.with_suffix(".mp4")
             echon.download(url, str(out))
+            echon.write_meta(str(out), {
+                "type": "video", "provider": "echon", "model": payload["model"],
+                "method": "image_to_video" if payload.get("first_frame") else "text_to_video",
+                "prompt": inputs["prompt"], "aspect_ratio": payload["aspect_ratio"],
+                "duration": payload["duration"], "first_frame": payload.get("first_frame"), "source_url": url,
+            })
         except Exception as e:
             return ToolResult(success=False, error=f"Echon video failed: {e}")
 

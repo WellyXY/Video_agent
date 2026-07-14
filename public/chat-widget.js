@@ -110,9 +110,19 @@
   #vas-assets{flex:1;overflow-y:auto;padding:14px;display:none;grid-template-columns:repeat(2,1fr);gap:10px;align-content:start}
   .vas-a{background:#181816;border:1px solid #2c2c2c;border-radius:8px;overflow:hidden;cursor:pointer}
   .vas-a:hover{border-color:#4a4a46}
-  .vas-a img,.vas-a video{width:100%;height:110px;object-fit:cover;display:block;background:#000}
+  .vas-a .thumb{width:100%;aspect-ratio:1/1;position:relative;background:#000}
+  .vas-a .thumb img,.vas-a .thumb video{width:100%;height:100%;object-fit:cover;display:block}
   .vas-a .cap{padding:6px 8px;font-size:10.5px;color:#a8a396;word-break:break-all;line-height:1.4}
   .vas-a .cap b{color:#e8e4da;font-size:11px}
+  .vas-badge{position:absolute;top:5px;left:5px;font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.6);color:#e8b33e;text-transform:uppercase;letter-spacing:.05em}
+  /* lightbox meta panel */
+  #vas-lb-meta{max-width:88vw;background:#141414;border:1px solid #2c2c2c;border-radius:10px;padding:14px 18px;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12.5px;color:#d8d4ca;max-height:26vh;overflow-y:auto}
+  #vas-lb-meta .row{display:flex;gap:10px;margin-bottom:5px;align-items:baseline}
+  #vas-lb-meta .k{color:#8a857a;min-width:96px;text-transform:uppercase;letter-spacing:.05em;font-size:10.5px;flex:none}
+  #vas-lb-meta .v{color:#e8e4da;word-break:break-word}
+  #vas-lb-meta .v.prompt{color:#cbd4c0}
+  #vas-lb-meta .none{color:#6f6a60}
+  #vas-lb-meta a{color:#8ab8ff}
   #vas-assets .empty{grid-column:1/-1;color:#6f6a60;text-align:center;padding:50px 16px;font-size:12.5px;line-height:1.8}
   #vas-lb{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9500;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px}
   #vas-lb.on{display:flex}
@@ -126,7 +136,8 @@
   #vas-board-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
   #vas-board-grid .ba{background:#141414;border:1px solid #2c2c2c;border-radius:10px;overflow:hidden;cursor:pointer;transition:.12s}
   #vas-board-grid .ba:hover{border-color:#4a4a46;transform:translateY(-1px)}
-  #vas-board-grid .ba img,#vas-board-grid .ba video{width:100%;height:150px;object-fit:cover;display:block;background:#000}
+  #vas-board-grid .ba .thumb{width:100%;aspect-ratio:1/1;position:relative;background:#000}
+  #vas-board-grid .ba .thumb img,#vas-board-grid .ba .thumb video{width:100%;height:100%;object-fit:cover;display:block}
   #vas-board-grid .ba .cap{padding:8px 10px;font-size:11px;color:#a8a396;word-break:break-all}
   #vas-board-grid .ba .cap b{color:#e8e4da;display:block;margin-bottom:2px}
   #vas-msgs{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
@@ -214,7 +225,7 @@
     <div id="vas-hint">studio :4747 · project ${OM_SLUG} · 看板會隨 agent 工作即時更新</div>`;
   const lb = document.createElement('div');
   lb.id = 'vas-lb';
-  lb.innerHTML = `<button class="x">×</button><div id="vas-lb-body"></div><div class="cap" id="vas-lb-cap"></div>`;
+  lb.innerHTML = `<button class="x">×</button><div id="vas-lb-body"></div><div class="cap" id="vas-lb-cap"></div><div id="vas-lb-meta"></div>`;
   document.body.appendChild(lb);
   lb.addEventListener('click', e => { if (e.target.id === 'vas-lb' || e.target.className === 'x') { lb.classList.remove('on'); document.getElementById('vas-lb-body').innerHTML = ''; } });
   // assets region on the board itself — a body sibling so Backlot's #app re-renders don't wipe it
@@ -356,20 +367,40 @@
   $('vas-tab-chat').onclick = () => showTab('chat');
   $('vas-tab-assets').onclick = () => showTab('assets');
 
+  const assetMeta = {}; // rel -> meta (from generation sidecar)
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  function renderMeta(rel) {
+    const m = assetMeta[rel];
+    const el = $('vas-lb-meta');
+    if (!m) { el.innerHTML = `<span class="none">（此素材沒有生成資訊——可能是上傳的檔案,或非 Echon 工具產生）</span>`; return; }
+    const order = [['method', '方法'], ['model', '模型'], ['prompt', 'PROMPT'], ['text', '文字'], ['aspect_ratio', '比例'], ['crop_aspect_ratio', '裁剪'], ['duration', '時長'], ['first_frame', 'i2v首幀'], ['reference_images', '參考圖'], ['tags', '標籤'], ['source_url', '來源']];
+    let rows = '';
+    for (const [k, label] of order) {
+      let v = m[k]; if (v == null || v === '' || (Array.isArray(v) && !v.length)) continue;
+      if (Array.isArray(v)) v = v.join('<br>');
+      else if (k === 'source_url' || k === 'first_frame') v = `<a href="${esc(v)}" target="_blank">${esc(String(v).slice(0, 70))}…</a>`;
+      else v = esc(v);
+      rows += `<div class="row"><span class="k">${label}</span><span class="v ${k === 'prompt' || k === 'text' ? 'prompt' : ''}">${v}</span></div>`;
+    }
+    el.innerHTML = rows || `<span class="none">（無詳細資訊）</span>`;
+  }
   function openLightbox(url, kind, rel) {
     const body = $('vas-lb-body');
     body.innerHTML = kind === 'image' ? `<img src="${url}">` : kind === 'video' ? `<video src="${url}" controls autoplay></video>` : `<audio src="${url}" controls autoplay></audio>`;
     $('vas-lb-cap').textContent = rel;
+    renderMeta(rel);
     lb.classList.add('on');
   }
   function assetUrl(rel) { return `${STUDIO}/om-assets/` + encodeURIComponent(rel).replace(/%2F/g, '/'); }
   function paintGrid(container, media, cls, thumbH) {
+    media.forEach(a => { assetMeta[a.rel] = a.meta || null; });
     container.innerHTML = media.map(a => {
       const url = assetUrl(a.rel);
-      const thumb = a.kind === 'image' ? `<img loading="lazy" src="${url}">`
+      const inner = a.kind === 'image' ? `<img loading="lazy" src="${url}">`
         : a.kind === 'video' ? `<video muted preload="metadata" src="${url}"></video>`
-        : `<div style="height:${thumbH}px;display:flex;align-items:center;justify-content:center;font-size:30px;background:#0a0a0a">🎵</div>`;
-      return `<div class="${cls}" data-url="${url}" data-kind="${a.kind}" data-rel="${a.rel}">${thumb}<div class="cap"><b>${a.name}</b>${(a.size / 1024).toFixed(0)} KB</div></div>`;
+        : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:30px;background:#0a0a0a">🎵</div>`;
+      const badge = a.meta && a.meta.method ? `<span class="vas-badge">${a.meta.method.replace(/_/g, ' ').replace('text to ', 't2').replace('image to ', 'i2')}</span>` : '';
+      return `<div class="${cls}" data-url="${url}" data-kind="${a.kind}" data-rel="${a.rel}"><div class="thumb">${inner}${badge}</div><div class="cap"><b>${a.name}</b>${(a.size / 1024).toFixed(0)} KB</div></div>`;
     }).join('');
     container.querySelectorAll('.' + cls).forEach(el => el.onclick = () => openLightbox(el.dataset.url, el.dataset.kind, el.dataset.rel));
   }

@@ -295,9 +295,12 @@ function walkMedia(dirAbs, relBase, out, depth) {
     if (e.isDirectory()) walkMedia(abs, rel, out, depth + 1);
     else {
       const ext = path.extname(e.name).toLowerCase();
+      if (e.name.endsWith('.meta.json')) continue; // sidecar, attached to its media file below
       if (MEDIA_EXT.has(ext)) {
         let stat; try { stat = fs.statSync(abs); } catch { continue; }
-        out.push({ rel, name: e.name, ext, size: stat.size, mtime: stat.mtimeMs, kind: ['.mp4', '.webm', '.mov'].includes(ext) ? 'video' : ['.mp3', '.wav', '.m4a'].includes(ext) ? 'audio' : 'image' });
+        let meta = null;
+        try { meta = JSON.parse(fs.readFileSync(abs + '.meta.json', 'utf8')); } catch {}
+        out.push({ rel, name: e.name, ext, size: stat.size, mtime: stat.mtimeMs, meta, kind: ['.mp4', '.webm', '.mov'].includes(ext) ? 'video' : ['.mp3', '.wav', '.m4a'].includes(ext) ? 'audio' : 'image' });
       } else if (ext === '.json' && /checkpoint|approval|gate|decision/i.test(e.name)) {
         let stat; try { stat = fs.statSync(abs); } catch { continue; }
         if (stat.size < 200000) out.push({ rel, name: e.name, ext, size: stat.size, mtime: stat.mtimeMs, kind: 'checkpoint' });
