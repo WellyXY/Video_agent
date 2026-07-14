@@ -87,6 +87,17 @@ say "Injecting chat widget into Backlot pages"
 inject OpenMontage/backlot/ui/board.html
 inject OpenMontage/backlot/ui/index.html
 
+# ---------- 3b. install extra OpenMontage generation tools (Echon gateway) ----------
+if [ -d om-ext/tools ]; then
+  say "Installing extra generation tools into OpenMontage (Echon gateway)"
+  # copy preserving graphics/ video/ subdirs; overwrite so updates land
+  (cd om-ext/tools && find . -name '*.py' -print0 | while IFS= read -r -d '' f; do
+      mkdir -p "../../OpenMontage/tools/$(dirname "$f")"
+      cp "$f" "../../OpenMontage/tools/$f"
+      echo "  installed: OpenMontage/tools/$f"
+   done)
+fi
+
 # ---------- 4. done ----------
 say "Setup complete"
 echo
