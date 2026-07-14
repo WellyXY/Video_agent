@@ -202,7 +202,7 @@
     else if (ev.type === 'assistant') { d.className = 'vas-m a'; d.innerHTML = md(ev.text); if (!OPEN) $('vas-dot').style.display = 'block'; }
     else if (ev.type === 'tool') { d.className = 'vas-m t'; d.textContent = '⚙ ' + ev.text; }
     else if (ev.type === 'result') {
-      d.className = 'vas-m r'; d.textContent = `— done (${ev.turns || '?'} turns${ev.cost != null ? ' · $' + Number(ev.cost).toFixed(3) : ''}) —`;
+      d.className = 'vas-m r'; const extra = ev.cost != null ? ' · $' + Number(ev.cost).toFixed(3) : (ev.tokens ? ` · ${ev.tokens.in}+${ev.tokens.out} tok` : ''); d.textContent = `— ${ev.text || 'done'} (${ev.turns || '?'} turns${extra}) —`;
       // brand-new project: once the agent's first run created the folder, reload so the board appears
       if (BOARD_MISSING) fetch(`/api/project/${encodeURIComponent(OM_SLUG)}/state`).then(r => { if (r.ok) location.reload(); });
     }
@@ -237,6 +237,7 @@
     .then(j => {
       PID = j.project.id;
       $('vas-nm').textContent = j.project.name;
+      if (j.provider) $('vas-hint').textContent = `agent: ${j.provider}${j.model && j.provider==='openai' ? ' · ' + j.model : ''} · project ${OM_SLUG} · 看板會隨 agent 工作即時更新`;
       setBusy(j.busy);
       connect();
     })

@@ -15,6 +15,29 @@ const REGISTRY = path.join(ROOT, 'studio-projects.json');
 const PORT = process.env.PORT || 4747;
 const BACKLOT_PORT = process.env.BACKLOT_PORT || 4750;
 
+// ---------- agent provider (claude = Claude Agent SDK · openai = GPT tool-loop) ----------
+const AGENT_PROVIDER = (process.env.AGENT_PROVIDER || 'claude').toLowerCase();
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5';
+const OPENAI_BASE = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+const SESSIONS_DIR = path.join(ROOT, 'sessions');
+
+function loadDotEnv(file) {
+  const out = {};
+  try {
+    for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*("?)(.*)\2\s*$/);
+      if (!m) continue;
+      // drop inline comments / placeholder-only values ("KEY= # note" must not count as set)
+      const v = m[3].split(/\s+#/)[0].trim();
+      if (v && !v.startsWith('#')) out[m[1]] = v;
+    }
+  } catch {}
+  return out;
+}
+function getOpenAIKey() {
+  return process.env.OPENAI_API_KEY || loadDotEnv(path.join(OM_REPO, '.env')).OPENAI_API_KEY || null;
+}
+
 // ---------- Backlot (OpenMontage's built-in production board) ----------
 let backlotProc = null;
 function backlotAlive() {
@@ -66,8 +89,140 @@ function emit(id, ev) {
   for (const res of s.clients) { try { res.write(line); } catch {} }
 }
 
-// ---------- agent runner ----------
-async function runAgent(projectId, userText) {
+// ---------- OpenAI (GPT) tool-loop provider ----------
+const { execFile } = require('child_process');
+
+function buildOpenAISystemPrompt(proj) {
+  let contract = '';
+  for (const f of ['AGENTS.md', 'CODEX.md']) {
+    try { contract += `\n\n===== ${f} =====\n` + fs.readFileSync(path.join(OM_REPO, f), 'utf8'); } catch {}
+  }
+  if (contract.length > 60000) contract = contract.slice(0, 60000) + '\n…(truncated)';
+  return `You are the orchestrating agent for OpenMontage, an agentic video-production system.
+Working directory (already set for every tool call): ${OM_REPO}
+Studio project: "${proj.name}" (slug: ${proj.slug}). When you create the OpenMontage project folder, name it "${proj.slug}".
+
+You have three tools: run_bash, read_file, write_file. Use run_bash with the repo's venv python (.venv/bin/python) to run OpenMontage tools.
+Follow the OpenMontage agent contract below exactly — in particular: all video production goes through a pipeline (read its manifest and stage-director skills first), write checkpoints, and PAUSE at every approval gate (and before any paid generation) by ending your reply with a question to the user.
+${contract}`;
+}
+
+const OPENAI_TOOLS = [
+  { type: 'function', function: { name: 'run_bash', description: 'Run a bash command inside the OpenMontage repo. Returns stdout+stderr (truncated).',
+      parameters: { type: 'object', properties: { command: { type: 'string' }, timeout_sec: { type: 'number', description: 'default 300' } }, required: ['command'] } } },
+  { type: 'function', function: { name: 'read_file', description: 'Read a text file (path relative to the OpenMontage repo or absolute).',
+      parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } } },
+  { type: 'function', function: { name: 'write_file', description: 'Write a text file (path relative to the OpenMontage repo or absolute). Creates parent dirs.',
+      parameters: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } } },
+];
+
+function clip(s, n) { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + `\n…(truncated ${s.length - n} chars)` : s; }
+
+function execTool(name, args, signal) {
+  return new Promise(resolve => {
+    try {
+      if (name === 'run_bash') {
+        const timeout = Math.min((args.timeout_sec || 300), 900) * 1000;
+        const child = execFile('/bin/bash', ['-lc', args.command], { cwd: OM_REPO, timeout, maxBuffer: 16 * 1024 * 1024 },
+          (err, stdout, stderr) => {
+            let out = clip(stdout, 20000) + (stderr ? '\n[stderr]\n' + clip(stderr, 8000) : '');
+            if (err && err.killed) out += '\n[timed out]';
+            else if (err && err.code) out += `\n[exit code ${err.code}]`;
+            resolve(out || '(no output)');
+          });
+        if (signal) signal.addEventListener('abort', () => child.kill('SIGTERM'), { once: true });
+      } else if (name === 'read_file') {
+        const p = path.isAbsolute(args.path) ? args.path : path.join(OM_REPO, args.path);
+        resolve(clip(fs.readFileSync(p, 'utf8'), 40000));
+      } else if (name === 'write_file') {
+        const p = path.isAbsolute(args.path) ? args.path : path.join(OM_REPO, args.path);
+        fs.mkdirSync(path.dirname(p), { recursive: true });
+        fs.writeFileSync(p, args.content);
+        resolve(`written: ${p} (${args.content.length} chars)`);
+      } else resolve(`unknown tool: ${name}`);
+    } catch (e) { resolve(`error: ${e.message}`); }
+  });
+}
+
+function historyPath(projectId) { return path.join(SESSIONS_DIR, `${projectId}.openai.json`); }
+function loadHistory(projectId) {
+  try { return JSON.parse(fs.readFileSync(historyPath(projectId), 'utf8')); } catch { return []; }
+}
+function saveHistory(projectId, msgs) {
+  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+  fs.writeFileSync(historyPath(projectId), JSON.stringify(msgs, null, 1));
+}
+function trimHistory(msgs) {
+  // keep it bounded: first 2 (early context) + last 60 entries
+  if (msgs.length > 80) return msgs.slice(0, 2).concat(msgs.slice(-60));
+  return msgs;
+}
+
+async function runAgentOpenAI(projectId, userText) {
+  const s = st(projectId);
+  if (s.busy) throw new Error('agent busy');
+  s.busy = true;
+  const reg = loadRegistry();
+  const proj = reg.projects.find(p => p.id === projectId);
+  if (!proj) { s.busy = false; throw new Error('project not found'); }
+
+  emit(projectId, { type: 'user', text: userText });
+  emit(projectId, { type: 'status', text: 'running' });
+
+  const abort = new AbortController();
+  s.abort = abort;
+  const key = getOpenAIKey();
+  let rounds = 0, inTok = 0, outTok = 0;
+
+  try {
+    if (!key) throw new Error('OPENAI_API_KEY not set — export it or fill it in OpenMontage/.env');
+    let msgs = loadHistory(projectId);
+    msgs.push({ role: 'user', content: userText });
+
+    for (; rounds < 50; rounds++) {
+      if (abort.signal.aborted) break;
+      const body = {
+        model: OPENAI_MODEL,
+        messages: [{ role: 'system', content: buildOpenAISystemPrompt(proj) }, ...trimHistory(msgs)],
+        tools: OPENAI_TOOLS,
+      };
+      const r = await fetch(`${OPENAI_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify(body),
+        signal: abort.signal,
+      });
+      if (!r.ok) throw new Error(`OpenAI API ${r.status}: ${clip(await r.text(), 400)}`);
+      const j = await r.json();
+      if (j.usage) { inTok += j.usage.prompt_tokens || 0; outTok += j.usage.completion_tokens || 0; }
+      const m = j.choices?.[0]?.message;
+      if (!m) throw new Error('empty completion');
+      msgs.push(m);
+      if (m.content && m.content.trim()) emit(projectId, { type: 'assistant', text: m.content });
+      const calls = m.tool_calls || [];
+      if (!calls.length) break; // final answer
+      for (const c of calls) {
+        let args = {};
+        try { args = JSON.parse(c.function.arguments || '{}'); } catch {}
+        const preview = c.function.name === 'run_bash' ? args.command : (args.path || '');
+        emit(projectId, { type: 'tool', text: `${c.function.name} ${clip(preview, 200)}` });
+        const result = await execTool(c.function.name, args, abort.signal);
+        msgs.push({ role: 'tool', tool_call_id: c.id, content: result });
+      }
+    }
+    saveHistory(projectId, msgs);
+    emit(projectId, { type: 'result', text: 'done', turns: rounds + 1, tokens: { in: inTok, out: outTok } });
+  } catch (e) {
+    if (!abort.signal.aborted) emit(projectId, { type: 'error', text: String(e.message || e) });
+    else emit(projectId, { type: 'result', text: 'interrupted', turns: rounds });
+  } finally {
+    s.busy = false; s.abort = null;
+    emit(projectId, { type: 'status', text: 'idle' });
+  }
+}
+
+// ---------- agent runner (Claude Agent SDK) ----------
+async function runAgentClaude(projectId, userText) {
   const s = st(projectId);
   if (s.busy) throw new Error('agent busy');
   s.busy = true;
@@ -189,7 +344,7 @@ app.get('/', async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, omRepo: OM_REPO, omExists: fs.existsSync(OM_REPO), omProjectsDir: fs.existsSync(OM_PROJECTS) });
+  res.json({ ok: true, omRepo: OM_REPO, omExists: fs.existsSync(OM_REPO), omProjectsDir: fs.existsSync(OM_PROJECTS), provider: AGENT_PROVIDER, model: AGENT_PROVIDER === 'openai' ? OPENAI_MODEL : 'claude-code-default', openaiKey: !!getOpenAIKey() });
 });
 
 app.get('/api/projects', (req, res) => {
@@ -270,7 +425,8 @@ app.post('/api/projects/:id/message', (req, res) => {
   if (!text || !text.trim()) return res.status(400).json({ error: 'text required' });
   const s = st(req.params.id);
   if (s.busy) return res.status(409).json({ error: 'agent is busy — wait or interrupt' });
-  runAgent(req.params.id, text.trim()).catch(() => {});
+  const run = AGENT_PROVIDER === 'openai' ? runAgentOpenAI : runAgentClaude;
+  run(req.params.id, text.trim()).catch(() => {});
   res.json({ ok: true });
 });
 
@@ -292,7 +448,7 @@ app.get('/api/bind', (req, res) => {
     reg.projects.push(proj); saveRegistry(reg);
   }
   const s = sessions.get(proj.id);
-  res.json({ project: proj, busy: !!(s && s.busy), events: s ? s.events.length : 0 });
+  res.json({ project: proj, busy: !!(s && s.busy), events: s ? s.events.length : 0, provider: AGENT_PROVIDER, model: AGENT_PROVIDER === 'openai' ? OPENAI_MODEL : 'claude' });
 });
 
 app.post('/api/projects/:id/interrupt', (req, res) => {

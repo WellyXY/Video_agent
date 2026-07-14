@@ -64,7 +64,26 @@ node server.js
 ```
 </details>
 
-**環境變數(都有預設值,一般不用動):** `PORT`(Studio,4747)、`BACKLOT_PORT`(4750)、`OM_REPO`(OpenMontage 路徑)。
+**環境變數(都有預設值,一般不用動):** `PORT`(Studio,4747)、`BACKLOT_PORT`(4750)、`OM_REPO`(OpenMontage 路徑)、`AGENT_PROVIDER`(見下)。
+
+### 切換 Agent 大腦:Claude 或 GPT
+
+```bash
+node server.js                          # 預設:Claude(Claude Agent SDK,需 claude login 或 ANTHROPIC_API_KEY)
+AGENT_PROVIDER=openai node server.js    # GPT:自建工具迴圈(需 OPENAI_API_KEY,填環境變數或 OpenMontage/.env)
+OPENAI_MODEL=gpt-5 AGENT_PROVIDER=openai node server.js   # 指定模型(預設 gpt-5;OPENAI_BASE_URL 可換相容端點)
+```
+
+兩種 provider 的差異:
+
+| | `claude`(預設) | `openai` |
+|---|---|---|
+| 執行殼 | Claude Code(完整 harness:上下文壓縮、規劃) | 自建 tool-loop(run_bash / read_file / write_file) |
+| 契約載入 | CLAUDE.md(SDK settingSources) | AGENTS.md + CODEX.md(注入 system prompt) |
+| 對話續接 | Claude session resume | `sessions/<專案>.openai.json`(跨重啟保留) |
+| 成本顯示 | 每回合 $ | 每回合 tokens |
+
+注意:openai 路徑是輕量迴圈,長製作的上下文管理與規劃能力弱於 Claude Code 殼;跑大型 pipeline 建議 claude,openai 適合備援或 A/B 對比。
 
 ## 三、API Key(要用商業視頻模型才需要)
 
