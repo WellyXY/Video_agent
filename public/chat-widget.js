@@ -118,6 +118,17 @@
   #vas-lb.on{display:flex}
   #vas-lb img,#vas-lb video{max-width:90vw;max-height:82vh;border-radius:8px}
   #vas-lb .cap{color:#a8a396;font-size:12px} #vas-lb .x{position:absolute;top:18px;right:26px;color:#fff;font-size:26px;background:none;border:none;cursor:pointer}
+  /* assets region injected into the Backlot board itself */
+  #vas-board-assets{display:none;max-width:1180px;margin:0 auto 60px;padding:22px 44px 0;border-top:1px solid #2c2c2c;font-family:"SF Mono",ui-monospace,Menlo,monospace}
+  #vas-board-assets .bh{display:flex;align-items:baseline;gap:12px;margin:0 0 14px}
+  #vas-board-assets .bh .t{font-size:13px;letter-spacing:.18em;color:#8a857a;font-weight:700}
+  #vas-board-assets .bh .c{font-size:12px;color:#6f6a60}
+  #vas-board-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+  #vas-board-grid .ba{background:#141414;border:1px solid #2c2c2c;border-radius:10px;overflow:hidden;cursor:pointer;transition:.12s}
+  #vas-board-grid .ba:hover{border-color:#4a4a46;transform:translateY(-1px)}
+  #vas-board-grid .ba img,#vas-board-grid .ba video{width:100%;height:150px;object-fit:cover;display:block;background:#000}
+  #vas-board-grid .ba .cap{padding:8px 10px;font-size:11px;color:#a8a396;word-break:break-all}
+  #vas-board-grid .ba .cap b{color:#e8e4da;display:block;margin-bottom:2px}
   #vas-msgs{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
   .vas-m{max-width:95%;line-height:1.7;word-break:break-word}
   .vas-m.u{align-self:flex-end;background:#1c2433;border:1px solid #2d3f5c;border-radius:8px 8px 3px 8px;padding:10px 13px;color:#cfe0f5;white-space:pre-wrap;font-size:14px}
@@ -193,6 +204,14 @@
   lb.innerHTML = `<button class="x">×</button><div id="vas-lb-body"></div><div class="cap" id="vas-lb-cap"></div>`;
   document.body.appendChild(lb);
   lb.addEventListener('click', e => { if (e.target.id === 'vas-lb' || e.target.className === 'x') { lb.classList.remove('on'); document.getElementById('vas-lb-body').innerHTML = ''; } });
+  // assets region on the board itself — a body sibling so Backlot's #app re-renders don't wipe it
+  const boardAssets = document.createElement('div');
+  boardAssets.id = 'vas-board-assets';
+  boardAssets.innerHTML = `<div class="bh"><span class="t">GENERATED ASSETS</span><span class="c" id="vas-board-count"></span></div><div id="vas-board-grid"></div>`;
+  // park the assets region inside the board wrap (a stable sibling after #app, so Backlot's
+  // #app re-renders never touch it — no flicker during active runs).
+  const wrapEl = document.getElementById('app')?.parentElement || document.body;
+  wrapEl.appendChild(boardAssets);
   document.body.appendChild(toggle);
   document.body.appendChild(drawer);
 
@@ -287,27 +306,37 @@
   $('vas-tab-chat').onclick = () => showTab('chat');
   $('vas-tab-assets').onclick = () => showTab('assets');
 
+  function openLightbox(url, kind, rel) {
+    const body = $('vas-lb-body');
+    body.innerHTML = kind === 'image' ? `<img src="${url}">` : kind === 'video' ? `<video src="${url}" controls autoplay></video>` : `<audio src="${url}" controls autoplay></audio>`;
+    $('vas-lb-cap').textContent = rel;
+    lb.classList.add('on');
+  }
+  function assetUrl(rel) { return `${STUDIO}/om-assets/` + encodeURIComponent(rel).replace(/%2F/g, '/'); }
+  function paintGrid(container, media, cls, thumbH) {
+    container.innerHTML = media.map(a => {
+      const url = assetUrl(a.rel);
+      const thumb = a.kind === 'image' ? `<img loading="lazy" src="${url}">`
+        : a.kind === 'video' ? `<video muted preload="metadata" src="${url}"></video>`
+        : `<div style="height:${thumbH}px;display:flex;align-items:center;justify-content:center;font-size:30px;background:#0a0a0a">🎵</div>`;
+      return `<div class="${cls}" data-url="${url}" data-kind="${a.kind}" data-rel="${a.rel}">${thumb}<div class="cap"><b>${a.name}</b>${(a.size / 1024).toFixed(0)} KB</div></div>`;
+    }).join('');
+    container.querySelectorAll('.' + cls).forEach(el => el.onclick = () => openLightbox(el.dataset.url, el.dataset.kind, el.dataset.rel));
+  }
+
   async function loadAssets() {
     if (!PID) return;
     let j; try { j = await fetch(`${STUDIO}/api/projects/${PID}/assets`).then(r => r.json()); } catch { return; }
     const media = (j.assets || []).filter(a => a.kind === 'image' || a.kind === 'video' || a.kind === 'audio');
     $('vas-acount').textContent = media.length ? `(${media.length})` : '';
+    // drawer 素材 tab
     const g = $('vas-assets');
-    if (!media.length) { g.innerHTML = `<div class="empty">還沒有生成的素材。<br>agent 產出的圖片/影片會出現在這裡。</div>`; return; }
-    g.innerHTML = media.map(a => {
-      const url = `${STUDIO}/om-assets/` + encodeURIComponent(a.rel).replace(/%2F/g, '/');
-      const thumb = a.kind === 'image' ? `<img loading="lazy" src="${url}">`
-        : a.kind === 'video' ? `<video muted preload="metadata" src="${url}"></video>`
-        : `<div style="height:110px;display:flex;align-items:center;justify-content:center;font-size:30px;background:#0a0a0a">🎵</div>`;
-      return `<div class="vas-a" data-url="${url}" data-kind="${a.kind}" data-rel="${a.rel}">${thumb}<div class="cap"><b>${a.name}</b><br>${(a.size / 1024).toFixed(0)} KB</div></div>`;
-    }).join('');
-    g.querySelectorAll('.vas-a').forEach(el => el.onclick = () => {
-      const { url, kind, rel } = el.dataset;
-      const body = $('vas-lb-body');
-      body.innerHTML = kind === 'image' ? `<img src="${url}">` : kind === 'video' ? `<video src="${url}" controls autoplay></video>` : `<audio src="${url}" controls autoplay></audio>`;
-      $('vas-lb-cap').textContent = rel;
-      lb.classList.add('on');
-    });
+    if (!media.length) g.innerHTML = `<div class="empty">還沒有生成的素材。<br>agent 產出的圖片/影片會出現在這裡。</div>`;
+    else paintGrid(g, media, 'vas-a', 110);
+    // board region
+    document.getElementById('vas-board-count').textContent = media.length ? `${media.length} files` : '';
+    boardAssets.style.display = media.length ? 'block' : 'none';
+    if (media.length) paintGrid(document.getElementById('vas-board-grid'), media, 'ba', 150);
   }
 
   // ---------- bind to studio project ----------
@@ -324,6 +353,8 @@
       if (j.provider) $('vas-hint').textContent = `agent: ${j.provider}${j.model && j.provider==='openai' ? ' · ' + j.model : ''} · project ${OM_SLUG} · 看板會隨 agent 工作即時更新`;
       setBusy(j.busy);
       connect();
+      loadAssets(); // populate the board assets region on open
+      setInterval(() => { if (BUSY) loadAssets(); }, 8000); // refresh while the agent works
     })
     .catch(() => add({ type: 'error', text: 'studio server (:4747) 未啟動 — cd ~/video-agent-studio && node server.js' }));
 })();
