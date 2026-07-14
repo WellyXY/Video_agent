@@ -103,6 +103,21 @@
   #vas-state{margin-left:auto;font-size:11px;letter-spacing:.1em;padding:3px 10px;border-radius:3px;border:1px solid #2c2c2c;color:#8a857a}
   #vas-state.busy{color:#e8b33e;border-color:#5c4a1a}
   #vas-close{background:none;border:none;color:#8a857a;font-size:17px;cursor:pointer}
+  #vas-tabs{display:flex;gap:4px;padding:8px 14px 0}
+  #vas-tabs button{background:transparent;border:1px solid transparent;color:#8a857a;padding:6px 12px;border-radius:7px 7px 0 0;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700}
+  #vas-tabs button.on{color:#e8e4da;background:#181816;border-color:#2c2c2c;border-bottom-color:#181816}
+  #vas-acount{color:#e8b33e;font-size:11px}
+  #vas-assets{flex:1;overflow-y:auto;padding:14px;display:none;grid-template-columns:repeat(2,1fr);gap:10px;align-content:start}
+  .vas-a{background:#181816;border:1px solid #2c2c2c;border-radius:8px;overflow:hidden;cursor:pointer}
+  .vas-a:hover{border-color:#4a4a46}
+  .vas-a img,.vas-a video{width:100%;height:110px;object-fit:cover;display:block;background:#000}
+  .vas-a .cap{padding:6px 8px;font-size:10.5px;color:#a8a396;word-break:break-all;line-height:1.4}
+  .vas-a .cap b{color:#e8e4da;font-size:11px}
+  #vas-assets .empty{grid-column:1/-1;color:#6f6a60;text-align:center;padding:50px 16px;font-size:12.5px;line-height:1.8}
+  #vas-lb{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9500;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+  #vas-lb.on{display:flex}
+  #vas-lb img,#vas-lb video{max-width:90vw;max-height:82vh;border-radius:8px}
+  #vas-lb .cap{color:#a8a396;font-size:12px} #vas-lb .x{position:absolute;top:18px;right:26px;color:#fff;font-size:26px;background:none;border:none;cursor:pointer}
   #vas-msgs{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
   .vas-m{max-width:95%;line-height:1.7;word-break:break-word}
   .vas-m.u{align-self:flex-end;background:#1c2433;border:1px solid #2d3f5c;border-radius:8px 8px 3px 8px;padding:10px 13px;color:#cfe0f5;white-space:pre-wrap;font-size:14px}
@@ -155,7 +170,12 @@
       <span id="vas-state">IDLE</span>
       <button id="vas-close">✕</button>
     </div>
+    <div id="vas-tabs">
+      <button id="vas-tab-chat" class="on">💬 對話</button>
+      <button id="vas-tab-assets">🖼 素材 <span id="vas-acount"></span></button>
+    </div>
     <div id="vas-msgs"></div>
+    <div id="vas-assets"></div>
     <div id="vas-quick">
       <button data-t="✅ 批准,繼續下一步">✅ 批准</button>
       <button data-t="請修改後再給我看一次">🔁 修改</button>
@@ -168,6 +188,11 @@
       <button id="vas-send">▶</button>
     </div>
     <div id="vas-hint">studio :4747 · project ${OM_SLUG} · 看板會隨 agent 工作即時更新</div>`;
+  const lb = document.createElement('div');
+  lb.id = 'vas-lb';
+  lb.innerHTML = `<button class="x">×</button><div id="vas-lb-body"></div><div class="cap" id="vas-lb-cap"></div>`;
+  document.body.appendChild(lb);
+  lb.addEventListener('click', e => { if (e.target.id === 'vas-lb' || e.target.className === 'x') { lb.classList.remove('on'); document.getElementById('vas-lb-body').innerHTML = ''; } });
   document.body.appendChild(toggle);
   document.body.appendChild(drawer);
 
@@ -220,6 +245,7 @@
     else if (ev.type === 'tool') { d.className = 'vas-m t'; d.textContent = '⚙ ' + ev.text; }
     else if (ev.type === 'result') {
       d.className = 'vas-m r'; const extra = ev.cost != null ? ' · $' + Number(ev.cost).toFixed(3) : (ev.tokens ? ` · ${ev.tokens.in}+${ev.tokens.out} tok` : ''); d.textContent = `— ${ev.text || 'done'} (${ev.turns || '?'} turns${extra}) —`;
+      loadAssets();
       // brand-new project: once the agent's first run created the folder, reload so the board appears
       if (BOARD_MISSING) fetch(`/api/project/${encodeURIComponent(OM_SLUG)}/state`).then(r => { if (r.ok) location.reload(); });
     }
@@ -247,6 +273,42 @@
   $('vas-stop').onclick = () => fetch(`${STUDIO}/api/projects/${PID}/interrupt`, { method: 'POST' });
   $('vas-input').addEventListener('keydown', e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); send(); } });
   $('vas-quick').addEventListener('click', e => { const b = e.target.closest('button'); if (b) send(b.dataset.t); });
+
+  // ---------- assets panel ----------
+  function showTab(which) {
+    const chat = which === 'chat';
+    $('vas-tab-chat').classList.toggle('on', chat);
+    $('vas-tab-assets').classList.toggle('on', !chat);
+    $('vas-msgs').style.display = chat ? 'flex' : 'none';
+    $('vas-quick').style.display = chat ? 'flex' : 'none';
+    $('vas-assets').style.display = chat ? 'none' : 'grid';
+    if (!chat) loadAssets();
+  }
+  $('vas-tab-chat').onclick = () => showTab('chat');
+  $('vas-tab-assets').onclick = () => showTab('assets');
+
+  async function loadAssets() {
+    if (!PID) return;
+    let j; try { j = await fetch(`${STUDIO}/api/projects/${PID}/assets`).then(r => r.json()); } catch { return; }
+    const media = (j.assets || []).filter(a => a.kind === 'image' || a.kind === 'video' || a.kind === 'audio');
+    $('vas-acount').textContent = media.length ? `(${media.length})` : '';
+    const g = $('vas-assets');
+    if (!media.length) { g.innerHTML = `<div class="empty">還沒有生成的素材。<br>agent 產出的圖片/影片會出現在這裡。</div>`; return; }
+    g.innerHTML = media.map(a => {
+      const url = `${STUDIO}/om-assets/` + encodeURIComponent(a.rel).replace(/%2F/g, '/');
+      const thumb = a.kind === 'image' ? `<img loading="lazy" src="${url}">`
+        : a.kind === 'video' ? `<video muted preload="metadata" src="${url}"></video>`
+        : `<div style="height:110px;display:flex;align-items:center;justify-content:center;font-size:30px;background:#0a0a0a">🎵</div>`;
+      return `<div class="vas-a" data-url="${url}" data-kind="${a.kind}" data-rel="${a.rel}">${thumb}<div class="cap"><b>${a.name}</b><br>${(a.size / 1024).toFixed(0)} KB</div></div>`;
+    }).join('');
+    g.querySelectorAll('.vas-a').forEach(el => el.onclick = () => {
+      const { url, kind, rel } = el.dataset;
+      const body = $('vas-lb-body');
+      body.innerHTML = kind === 'image' ? `<img src="${url}">` : kind === 'video' ? `<video src="${url}" controls autoplay></video>` : `<audio src="${url}" controls autoplay></audio>`;
+      $('vas-lb-cap').textContent = rel;
+      lb.classList.add('on');
+    });
+  }
 
   // ---------- bind to studio project ----------
   fetch(`${STUDIO}/api/bind?slug=${encodeURIComponent(OM_SLUG)}`)
