@@ -57,6 +57,42 @@ function slugify(name) {
   return s || 'project-' + crypto.randomUUID().slice(0, 6);
 }
 
+// First-message context injected into a fresh agent session. The critical part:
+// this runs headless, and the user watches the Backlot board — which reflects ONLY
+// checkpoint files on disk. So the agent must actually DRIVE the pipeline (read the
+// manifest + stage skills, run preflight, write checkpoints per stage), not just
+// describe a plan in chat.
+function projectContext(proj, userText) {
+  return `[Studio project context — read carefully]
+This conversation drives the OpenMontage project "${proj.name}" (folder: projects/${proj.slug}/, already initialized). Do all work inside that folder.
+
+You are running HEADLESS inside a web studio. The user watches TWO things: (1) this chat, and (2) the Backlot production board. The Backlot board updates ONLY from checkpoint files written to projects/${proj.slug}/ (checkpoint_<stage>.json). Describing a stage in chat does NOT move the board.
+
+Therefore, to actually make progress you MUST run the OpenMontage pipeline machinery, not just converse:
+1. Identify the right pipeline, read its manifest in pipeline_defs/ and its stage-director skills, and run preflight.
+2. As you work each stage (research → proposal → script → scene_plan → assets → …), WRITE the checkpoint for that stage via the repo's checkpoint tooling (status in_progress → completed, or awaiting_human at a gate). This is what lights up the board.
+3. At every approval gate, set the stage checkpoint to awaiting_human AND ask me in chat, then stop and wait. Do not do paid generation before I approve.
+
+Do not skip straight to a chat-only proposal — write the research + proposal checkpoints first so the board reflects reality, then present the proposal for approval.
+
+User request: ${userText}`;
+}
+
+// On a fresh run (no checkpoints yet), immediately mark the first stage in_progress so
+// the Backlot board shows life the instant the user sends a message — instead of staying
+// dark for minutes while the agent does research before writing its first checkpoint.
+function markInitialProgress(proj) {
+  try {
+    const dir = path.join(OM_PROJECTS, proj.slug);
+    if (!fs.existsSync(dir)) return;
+    if (fs.readdirSync(dir).some(f => /^checkpoint_.*\.json$/.test(f))) return; // already started
+    const py = path.join(OM_REPO, '.venv', 'bin', 'python');
+    const bin = fs.existsSync(py) ? py : 'python3';
+    const code = `from lib.checkpoint import write_checkpoint, PROJECTS_DIR; write_checkpoint(PROJECTS_DIR, ${JSON.stringify(proj.slug)}, "research", "in_progress", {}, pipeline_type="cinematic")`;
+    require('child_process').execFile(bin, ['-c', code], { cwd: OM_REPO, timeout: 15000 }, () => {});
+  } catch {}
+}
+
 // ---------- per-project agent session state ----------
 const sessions = new Map(); // id -> {events:[], clients:Set(res), busy:bool, abort:AbortController|null}
 function st(id) {
@@ -90,10 +126,11 @@ function runAgentCodex(projectId, userText) {
 
   emit(projectId, { type: 'user', text: userText });
   emit(projectId, { type: 'status', text: 'running' });
+  markInitialProgress(proj);
 
   let prompt = userText;
   if (!proj.codexThreadId) {
-    prompt = `[Project context] This conversation belongs to the studio project "${proj.name}" (slug: ${proj.slug}). When you create the OpenMontage project/working directory for this production, name the folder "${proj.slug}". Follow the OpenMontage agent contract (AGENTS.md) and pause at approval gates by asking me in chat.\n\nUser request: ${userText}`;
+    prompt = projectContext(proj, userText);
   }
 
   const args = ['exec'];
@@ -171,6 +208,7 @@ async function runAgentClaude(projectId, userText) {
 
   emit(projectId, { type: 'user', text: userText });
   emit(projectId, { type: 'status', text: 'running' });
+  markInitialProgress(proj);
 
   const abort = new AbortController();
   s.abort = abort;
@@ -178,7 +216,7 @@ async function runAgentClaude(projectId, userText) {
   // First message of a project carries working-folder guidance so assets are discoverable.
   let prompt = userText;
   if (!proj.sessionId) {
-    prompt = `[Project context] This conversation belongs to the studio project "${proj.name}" (slug: ${proj.slug}). When you create the OpenMontage project/working directory for this production, name the folder "${proj.slug}" so its assets can be tracked. Follow OpenMontage pipelines and pause at approval gates by asking me in chat.\n\nUser request: ${userText}`;
+    prompt = projectContext(proj, userText);
   }
 
   try {
