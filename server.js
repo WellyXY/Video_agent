@@ -17,6 +17,7 @@ const BACKLOT_PORT = process.env.BACKLOT_PORT || 4750;
 
 // ---------- agent provider (claude = Claude Agent SDK · codex = OpenAI Codex CLI) ----------
 const AGENT_PROVIDER = (process.env.AGENT_PROVIDER || 'claude').toLowerCase();
+const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-opus-4-8'; // Opus 4.8 by default
 const CODEX_BIN = process.env.CODEX_BIN || 'codex';
 const CODEX_MODEL = process.env.CODEX_MODEL || ''; // empty = respect ~/.codex/config.toml
 
@@ -230,6 +231,7 @@ async function runAgentClaude(projectId, userText) {
         // Behave exactly like Claude Code opened in the OpenMontage repo:
         // full Claude Code system prompt + all setting sources (loads the
         // repo's CLAUDE.md / AGENT_GUIDE so OpenMontage's agent contract applies).
+        model: CLAUDE_MODEL,
         systemPrompt: { type: 'preset', preset: 'claude_code' },
         settingSources: ['user', 'project', 'local'],
         includePartialMessages: true, // token-level streaming to the chat UI
@@ -327,7 +329,7 @@ app.get('/', async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, omRepo: OM_REPO, omExists: fs.existsSync(OM_REPO), omProjectsDir: fs.existsSync(OM_PROJECTS), provider: AGENT_PROVIDER, model: AGENT_PROVIDER === 'codex' ? (CODEX_MODEL || 'codex-config-default') : 'claude-code-default' });
+  res.json({ ok: true, omRepo: OM_REPO, omExists: fs.existsSync(OM_REPO), omProjectsDir: fs.existsSync(OM_PROJECTS), provider: AGENT_PROVIDER, model: AGENT_PROVIDER === 'codex' ? (CODEX_MODEL || 'codex-config-default') : CLAUDE_MODEL });
 });
 
 app.get('/api/projects', (req, res) => {
@@ -403,6 +405,28 @@ app.get('/api/projects/:id/stream', (req, res) => {
   req.on('close', () => { clearInterval(ping); s.clients.delete(res); });
 });
 
+// upload a reference image/video into the project's uploads/ dir (raw body, no base64 bloat)
+app.post('/api/projects/:id/upload', express.raw({ type: '*/*', limit: '300mb' }), (req, res) => {
+  const reg = loadRegistry();
+  const p = reg.projects.find(x => x.id === req.params.id);
+  if (!p) return res.status(404).json({ error: 'not found' });
+  if (!req.body || !req.body.length) return res.status(400).json({ error: 'empty body' });
+  let name = (req.query.name || 'upload').toString().replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || 'upload';
+  if (!path.extname(name)) return res.status(400).json({ error: 'filename needs an extension' });
+  const dir = path.join(OM_PROJECTS, p.slug, 'uploads');
+  fs.mkdirSync(dir, { recursive: true });
+  let target = path.join(dir, name), i = 1;
+  const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
+  while (fs.existsSync(target)) target = path.join(dir, `${base}_${i++}${ext}`);
+  fs.writeFileSync(target, req.body);
+  const rel = path.posix.join(p.slug, 'uploads', path.basename(target));
+  res.json({
+    name: path.basename(target),
+    projectPath: `projects/${rel}`, // what the agent uses (relative to the OpenMontage repo)
+    url: `/om-assets/${encodeURIComponent(rel).replace(/%2F/g, '/')}`,
+  });
+});
+
 app.post('/api/projects/:id/message', (req, res) => {
   const { text } = req.body || {};
   if (!text || !text.trim()) return res.status(400).json({ error: 'text required' });
@@ -446,7 +470,7 @@ app.get('/api/bind', async (req, res) => {
   }
   await ensureOmProject(proj);
   const s = sessions.get(proj.id);
-  res.json({ project: proj, busy: !!(s && s.busy), events: s ? s.events.length : 0, provider: AGENT_PROVIDER, model: AGENT_PROVIDER === 'codex' ? (CODEX_MODEL || 'codex') : 'claude' });
+  res.json({ project: proj, busy: !!(s && s.busy), events: s ? s.events.length : 0, provider: AGENT_PROVIDER, model: AGENT_PROVIDER === 'codex' ? (CODEX_MODEL || 'codex') : CLAUDE_MODEL });
 });
 
 app.post('/api/projects/:id/interrupt', (req, res) => {

@@ -156,7 +156,17 @@
   #vas-quick button{background:#181816;border:1px solid #2c2c2c;color:#a8a396;border-radius:15px;
     padding:5px 14px;font-size:12.5px;cursor:pointer;font-family:inherit}
   #vas-quick button:hover{color:#e8e4da;border-color:#4a4a46}
-  #vas-inputrow{display:flex;gap:9px;padding:13px 16px;border-top:1px solid #2c2c2c}
+  #vas-attach{display:flex;gap:8px;flex-wrap:wrap;padding:0 16px}
+  #vas-attach:not(:empty){padding:10px 16px 0}
+  .vas-chip{display:inline-flex;align-items:center;gap:7px;background:#181816;border:1px solid #2c2c2c;border-radius:8px;padding:5px 8px;font-size:11.5px;color:#d8d4ca;max-width:230px}
+  .vas-chip img{width:28px;height:28px;object-fit:cover;border-radius:4px}
+  .vas-chip .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vas-chip .rm{background:none;border:none;color:#8a857a;cursor:pointer;font-size:13px;padding:0 2px}
+  .vas-chip .rm:hover{color:#ff9f97}
+  .vas-chip.up{opacity:.5}
+  #vas-attachbtn{background:#181816;border:1px solid #2c2c2c;color:#a8a396;border-radius:7px;padding:0 12px;cursor:pointer;font-size:16px}
+  #vas-attachbtn:hover{border-color:#4a4a46}
+  #vas-inputrow{display:flex;gap:9px;padding:13px 16px;border-top:1px solid #2c2c2c;align-items:flex-end}
   #vas-input{flex:1;background:#181816;border:1px solid #2c2c2c;color:#e8e4da;border-radius:7px;
     padding:10px 12px;font-size:14px;font-family:inherit;resize:none;min-height:44px;max-height:140px;outline:none}
   #vas-input:focus{border-color:#4a4a46}
@@ -193,7 +203,10 @@
       <button data-t="目前進度如何?列出已完成與待辦">📋 進度</button>
       <button data-t="這個專案目前總花費多少?">💰 成本</button>
     </div>
+    <div id="vas-attach"></div>
     <div id="vas-inputrow">
+      <input type="file" id="vas-file" accept="image/*,video/*" multiple style="display:none">
+      <button id="vas-attachbtn" title="上傳圖片/影片">📎</button>
       <textarea id="vas-input" placeholder="指揮 agent…(Shift+Enter 送出,Enter 換行)"></textarea>
       <button id="vas-stop">■</button>
       <button id="vas-send">▶</button>
@@ -279,12 +292,49 @@
     es.onmessage = e => { const ev = JSON.parse(e.data); if (ev.i != null) EVCOUNT = Math.max(EVCOUNT, ev.i + 1); add(ev); };
     es.onerror = () => { es.close(); setTimeout(connect, 2500); };
   }
+  // ---------- attachments (image/video upload) ----------
+  let attachments = []; // {name, projectPath, url, kind}
+  function renderChips() {
+    const c = $('vas-attach');
+    c.innerHTML = attachments.map((a, i) => {
+      const thumb = a.kind === 'image' ? `<img src="${STUDIO}${a.url}">` : '<span>🎬</span>';
+      return `<span class="vas-chip ${a.uploading ? 'up' : ''}">${thumb}<span class="nm">${a.name}</span><button class="rm" data-i="${i}">✕</button></span>`;
+    }).join('');
+    c.querySelectorAll('.rm').forEach(b => b.onclick = () => { attachments.splice(+b.dataset.i, 1); renderChips(); });
+  }
+  async function uploadFile(file) {
+    const kind = file.type.startsWith('video') ? 'video' : 'image';
+    const entry = { name: file.name, kind, uploading: true };
+    attachments.push(entry); renderChips();
+    try {
+      const r = await fetch(`${STUDIO}/api/projects/${PID}/upload?name=${encodeURIComponent(file.name)}`, {
+        method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'upload failed');
+      Object.assign(entry, j, { uploading: false });
+    } catch (e) {
+      attachments = attachments.filter(a => a !== entry);
+      add({ type: 'error', text: '上傳失敗:' + e.message });
+    }
+    renderChips();
+  }
+  $('vas-attachbtn').onclick = () => { if (PID) $('vas-file').click(); };
+  $('vas-file').onchange = e => { [...e.target.files].forEach(uploadFile); e.target.value = ''; };
+
   async function send(text) {
     text = (text ?? $('vas-input').value).trim();
-    if (!text || BUSY || !PID) return;
-    $('vas-input').value = '';
+    const ready = attachments.filter(a => a.projectPath && !a.uploading);
+    if ((!text && !ready.length) || BUSY || !PID) return;
+    if (attachments.some(a => a.uploading)) { add({ type: 'error', text: '附件還在上傳中,稍候再送。' }); return; }
+    let full = text;
+    if (ready.length) {
+      const lines = ready.map(a => `- ${a.projectPath}（${a.kind === 'video' ? '影片' : '圖片'}，可作參考/reference_images，或影片 first_frame）`).join('\n');
+      full = `[使用者上傳了以下檔案，請先用 Read 工具查看再據此工作]\n${lines}\n\n${text || '（請參考上面的附件）'}`;
+    }
+    $('vas-input').value = ''; attachments = []; renderChips();
     const r = await fetch(`${STUDIO}/api/projects/${PID}/message`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: full }),
     });
     if (!r.ok) { const j = await r.json().catch(() => ({})); add({ type: 'error', text: j.error || 'send failed' }); }
   }

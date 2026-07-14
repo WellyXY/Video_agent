@@ -69,10 +69,13 @@ node server.js
 ### 切換 Agent 大腦:Claude 殼或 Codex 殼
 
 ```bash
-node server.js                          # 預設:Claude(Claude Agent SDK / Claude Code 殼)
+node server.js                          # 預設:Claude(Claude Agent SDK / Claude Code 殼)· 模型 Opus 4.8
+CLAUDE_MODEL=claude-sonnet-5 node server.js              # 換 Claude 模型(預設 claude-opus-4-8)
 AGENT_PROVIDER=codex node server.js     # Codex(OpenAI Codex CLI 殼)
-CODEX_MODEL=gpt-5.x AGENT_PROVIDER=codex node server.js   # 指定模型(不設則用 ~/.codex/config.toml)
+CODEX_MODEL=gpt-5.x AGENT_PROVIDER=codex node server.js  # 換 Codex 模型(不設則用 ~/.codex/config.toml)
 ```
+
+**上傳參考素材**:聊天框左側 📎 可上傳圖片/影片,存到 `projects/<slug>/uploads/`,並自動附在下一則訊息裡(agent 會用 Read 工具看圖,或當作 `reference_images` / 影片 `first_frame`)。
 
 | | `claude`(預設) | `codex` |
 |---|---|---|
