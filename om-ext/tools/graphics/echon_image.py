@@ -41,9 +41,14 @@ class EchonImage(BaseTool):
     agent_skills = []
 
     capabilities = ["generate_image", "text_to_image", "generate_illustration"]
-    supports = {"reference_images": True, "aspect_ratio": True, "seed": False, "custom_size": False}
+    supports = {"reference_images": True, "aspect_ratio": True, "crop_aspect_ratio": True, "seed": False, "custom_size": False}
     best_for = ["product and brand imagery", "reference-guided image generation via the Echon gateway"]
     not_good_for = ["exact pixel-size control", "seeded reproducibility"]
+
+    # Control the shape with aspect_ratio (primary). If the model's output ratio is
+    # unreliable, ALSO pass crop_aspect_ratio (usually the same value) to center-crop
+    # the result to an exact ratio.
+    ASPECT_RATIOS = ["1:1", "16:9", "9:16", "4:3", "3:4", "2:3", "3:2"]
 
     input_schema = {
         "type": "object",
@@ -51,7 +56,17 @@ class EchonImage(BaseTool):
         "properties": {
             "prompt": {"type": "string"},
             "model": {"type": "string", "default": "gpt-image-2"},
-            "aspect_ratio": {"type": "string", "default": "1:1"},
+            "aspect_ratio": {
+                "type": "string",
+                "enum": ASPECT_RATIOS,
+                "default": "1:1",
+                "description": "Primary shape control. Use 9:16 for vertical/social, 16:9 for wide, 1:1 for square.",
+            },
+            "crop_aspect_ratio": {
+                "type": "string",
+                "enum": ASPECT_RATIOS,
+                "description": "Optional. Center-crop the output to this exact ratio — only set it (usually == aspect_ratio) if the model's raw ratio is unreliable.",
+            },
             "resolution": {"type": "string", "default": "720p"},
             "reference_images": {"type": "array", "items": {"type": "string"}, "default": []},
             "output_path": {"type": "string"},
@@ -83,6 +98,8 @@ class EchonImage(BaseTool):
             "aspect_ratio": inputs.get("aspect_ratio", "1:1"),
             "resolution": inputs.get("resolution", "720p"),
         }
+        if inputs.get("crop_aspect_ratio"):
+            payload["crop_aspect_ratio"] = inputs["crop_aspect_ratio"]
         refs = inputs.get("reference_images")
         if refs:
             payload["reference_images"] = refs

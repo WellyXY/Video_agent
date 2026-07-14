@@ -52,7 +52,12 @@ class EchonVideo(BaseTool):
         "properties": {
             "prompt": {"type": "string"},
             "model": {"type": "string", "default": "seedance-2.0-fast"},
-            "aspect_ratio": {"type": "string", "default": "16:9"},
+            "aspect_ratio": {
+                "type": "string",
+                "enum": ["16:9", "9:16", "1:1", "4:3", "3:4"],
+                "default": "16:9",
+                "description": "Shape control. Use 9:16 for vertical/social, 16:9 for wide/landscape.",
+            },
             "resolution": {"type": "string", "default": "720p"},
             "duration": {"type": "integer", "default": 5},
             "first_frame": {"type": "string", "description": "image URL for image-to-video"},
