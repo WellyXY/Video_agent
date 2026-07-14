@@ -66,24 +66,23 @@ node server.js
 
 **環境變數(都有預設值,一般不用動):** `PORT`(Studio,4747)、`BACKLOT_PORT`(4750)、`OM_REPO`(OpenMontage 路徑)、`AGENT_PROVIDER`(見下)。
 
-### 切換 Agent 大腦:Claude 或 GPT
+### 切換 Agent 大腦:Claude 殼或 Codex 殼
 
 ```bash
-node server.js                          # 預設:Claude(Claude Agent SDK,需 claude login 或 ANTHROPIC_API_KEY)
-AGENT_PROVIDER=openai node server.js    # GPT:自建工具迴圈(需 OPENAI_API_KEY,填環境變數或 OpenMontage/.env)
-OPENAI_MODEL=gpt-5 AGENT_PROVIDER=openai node server.js   # 指定模型(預設 gpt-5;OPENAI_BASE_URL 可換相容端點)
+node server.js                          # 預設:Claude(Claude Agent SDK / Claude Code 殼)
+AGENT_PROVIDER=codex node server.js     # Codex(OpenAI Codex CLI 殼)
+CODEX_MODEL=gpt-5.x AGENT_PROVIDER=codex node server.js   # 指定模型(不設則用 ~/.codex/config.toml)
 ```
 
-兩種 provider 的差異:
-
-| | `claude`(預設) | `openai` |
+| | `claude`(預設) | `codex` |
 |---|---|---|
-| 執行殼 | Claude Code(完整 harness:上下文壓縮、規劃) | 自建 tool-loop(run_bash / read_file / write_file) |
-| 契約載入 | CLAUDE.md(SDK settingSources) | AGENTS.md + CODEX.md(注入 system prompt) |
-| 對話續接 | Claude session resume | `sessions/<專案>.openai.json`(跨重啟保留) |
-| 成本顯示 | 每回合 $ | 每回合 tokens |
+| 執行殼 | Claude Code(Agent SDK) | Codex CLI(`codex exec --json`) |
+| 契約載入 | CLAUDE.md | AGENTS.md(Codex 原生讀取) |
+| 對話續接 | Claude session resume | Codex thread resume(`codexThreadId`) |
+| 認證 | `claude login` 或 ANTHROPIC_API_KEY | `codex login`(需含 Codex 的方案)或 **OPENAI_API_KEY**(`codex login --api-key`) |
+| 前置 | Claude Code 已裝 | `npm i -g @openai/codex` |
 
-注意:openai 路徑是輕量迴圈,長製作的上下文管理與規劃能力弱於 Claude Code 殼;跑大型 pipeline 建議 claude,openai 適合備援或 A/B 對比。
+注意:ChatGPT 帳號登入的 Codex 只支援特定模型;若遇到 `model is not supported when using Codex with a ChatGPT account`,改用 API key 認證,或用 `CODEX_MODEL` 指定你方案支援的模型。
 
 ## 三、API Key(要用商業視頻模型才需要)
 
