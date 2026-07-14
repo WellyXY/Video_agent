@@ -68,7 +68,7 @@ class EchonVideo(BaseTool):
     resource_profile = ResourceProfile(cpu_cores=1, ram_mb=512, vram_mb=0, disk_mb=300, network_required=True)
     retry_policy = RetryPolicy(max_retries=1, retryable_errors=["rate_limit", "timeout"])
     idempotency_key_fields = ["prompt", "model", "duration", "aspect_ratio", "first_frame"]
-    side_effects = ["writes video file to output_path", "calls Echon gateway"]
+    side_effects = ["synchronous: blocks until the file is ready then returns it — run in foreground, do NOT background or Monitor it", "writes video file to output_path", "calls Echon gateway"]
     user_visible_verification = ["Play the generated clip and check motion/quality"]
 
     poll_interval_s = 6

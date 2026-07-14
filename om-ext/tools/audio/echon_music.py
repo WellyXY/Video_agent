@@ -59,7 +59,7 @@ class EchonMusic(BaseTool):
     resource_profile = ResourceProfile(cpu_cores=1, ram_mb=512, vram_mb=0, disk_mb=100, network_required=True)
     retry_policy = RetryPolicy(max_retries=1, retryable_errors=["rate_limit", "timeout"])
     idempotency_key_fields = ["gpt_description_prompt", "tags", "make_instrumental"]
-    side_effects = ["writes audio file to output_path", "calls Echon gateway"]
+    side_effects = ["synchronous: blocks until the file is ready then returns it — run in foreground, do NOT background or Monitor it", "writes audio file to output_path", "calls Echon gateway"]
     user_visible_verification = ["Listen to the generated music"]
 
     poll_interval_s = 6

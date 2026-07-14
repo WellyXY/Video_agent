@@ -76,6 +76,8 @@ Therefore, to actually make progress you MUST run the OpenMontage pipeline machi
 
 Do not skip straight to a chat-only proposal — write the research + proposal checkpoints first so the board reflects reality, then present the proposal for approval.
 
+IMPORTANT — how to run the generation tools (echon_image / echon_video / echon_music / echon_voiceover / echon_sfx): they are SYNCHRONOUS — each one blocks and polls the gateway internally, then returns the finished file path. Video/music can take 1–3 minutes. Run them in the FOREGROUND in a single Bash call with a generous timeout (e.g. timeout ~600000ms / 600s) and just wait for the command to return. Do NOT run them with run_in_background, and do NOT set up a Monitor or poll an output file to "wait" for them — the tool already did the waiting internally; backgrounding + Monitor makes the turn hang forever even though the media was successfully produced.
+
 User request: ${userText}`;
 }
 
